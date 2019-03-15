@@ -13,6 +13,7 @@ using Microsoft.Azure.KeyVault;
 using System;
 using System.Text;
 using System.Collections.Concurrent;
+using Microsoft.Extensions.Logging;
 
 namespace AzureFunctionsPGPDecrypt
 {
@@ -24,9 +25,9 @@ namespace AzureFunctionsPGPDecrypt
         [FunctionName(nameof(PGPDecrypt))]
         public static async Task<IActionResult> RunAsync(
             [HttpTrigger(AuthorizationLevel.Function, "post", Route = null)]
-        HttpRequest req, TraceWriter log)
+        HttpRequest req, ILogger log)
         {
-            log.Info($"C# HTTP trigger function {nameof(PGPDecrypt)} processed a request.");
+            log.LogInformation($"C# HTTP trigger function {nameof(PGPDecrypt)} processed a request.");
 
             string privateKeySecretId = req.Query["privatekeysecretid"];
 
