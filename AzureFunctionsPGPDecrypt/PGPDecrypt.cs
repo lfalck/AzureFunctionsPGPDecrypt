@@ -19,7 +19,7 @@ namespace AzureFunctionsPGPDecrypt
 {
     public static class PGPDecrypt
     {
-        private static HttpClient client = new HttpClient();
+        private static readonly HttpClient client = new HttpClient();
         private static ConcurrentDictionary<string, string> secrects = new ConcurrentDictionary<string, string>();
 
         [FunctionName(nameof(PGPDecrypt))]
@@ -30,6 +30,7 @@ namespace AzureFunctionsPGPDecrypt
             log.LogInformation($"C# HTTP trigger function {nameof(PGPDecrypt)} processed a request.");
 
             string privateKeySecretId = req.Query["privatekeysecretid"];
+            string passPhraseSecretId = req.Query["passphrasesecretid"];
 
             if (privateKeySecretId == null)
             {
@@ -37,9 +38,14 @@ namespace AzureFunctionsPGPDecrypt
             }
 
             string privateKey;
+            string passPhrase = null;
             try
             {
-                privateKey = await GetPrivateKeyAsync(privateKeySecretId);
+                privateKey = await GetFromKeyVaultAsync(privateKeySecretId);
+                if (passPhraseSecretId != null)
+                {
+                    passPhrase = await GetFromKeyVaultAsync(passPhraseSecretId);
+                }
             }
             catch (KeyVaultErrorException e) when (e.Body.Error.Code == "SecretNotFound")
             {
@@ -50,12 +56,12 @@ namespace AzureFunctionsPGPDecrypt
                 return new UnauthorizedResult();
             }
 
-            Stream decryptedData = await DecryptAsync(req.Body, privateKey);
+            Stream decryptedData = await DecryptAsync(req.Body, privateKey, passPhrase);
 
             return new OkObjectResult(decryptedData);
         }
 
-        private static async Task<string> GetPrivateKeyAsync(string secretIdentifier)
+        private static async Task<string> GetFromKeyVaultAsync(string secretIdentifier)
         {
             if (!secrects.ContainsKey(secretIdentifier))
             {
@@ -70,7 +76,7 @@ namespace AzureFunctionsPGPDecrypt
             return secrects[secretIdentifier];
         }
 
-        private static async Task<Stream> DecryptAsync(Stream inputStream, string privateKey)
+        private static async Task<Stream> DecryptAsync(Stream inputStream, string privateKey, string passPhrase)
         {
             using (PGP pgp = new PGP())
             {
@@ -79,7 +85,7 @@ namespace AzureFunctionsPGPDecrypt
                 using (inputStream)
                 using (Stream privateKeyStream = GenerateStreamFromString(privateKey))
                 {
-                    await pgp.DecryptStreamAsync(inputStream, outputStream, privateKeyStream, null);
+                    await pgp.DecryptStreamAsync(inputStream, outputStream, privateKeyStream, passPhrase);
                     outputStream.Seek(0, SeekOrigin.Begin);
                     return outputStream;
                 }
