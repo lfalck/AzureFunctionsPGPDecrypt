@@ -9,4 +9,4 @@ Azure function which performs PGP decryption using [PgpCore](https://github.com/
 
 ## Key generation
 Option 1: Use a program such as [GPG](https://gnupg.org/) or [GPW4Win](https://www.gpg4win.org/).  
-Option 2: Use the console app **PGPEncryptConsoleApp** in the repo [AzureFunctionsPGPEncrypt](https://github.com/lfalck/AzureFunctionsPGPEncrypt)
+Option 2: Use the console app **PGPEncryptConsoleApp** in the repo [AzureFunctionsPGPEncrypt](https://github.com/lfalck/AzureFunctionsPGPEncrypt).
