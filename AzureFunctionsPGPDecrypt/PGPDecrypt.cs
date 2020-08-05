@@ -3,70 +3,40 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Azure.WebJobs;
 using Microsoft.Azure.WebJobs.Extensions.Http;
 using Microsoft.AspNetCore.Http;
-using Microsoft.Azure.WebJobs.Host;
 using PgpCore;
 using System.Threading.Tasks;
-using Microsoft.Azure.KeyVault.Models;
 using System.Net.Http;
-using Microsoft.Azure.Services.AppAuthentication;
-using Microsoft.Azure.KeyVault;
 using System;
 using System.Text;
 using System.Collections.Concurrent;
+using Microsoft.Extensions.Logging;
 
 namespace AzureFunctionsPGPDecrypt
 {
     public static class PGPDecrypt
     {
-        private static HttpClient client = new HttpClient();
-        private static ConcurrentDictionary<string, string> secrects = new ConcurrentDictionary<string, string>();
+        private const string PrivateKeyEnvironmentVariable = "pgp-private-key";
 
         [FunctionName(nameof(PGPDecrypt))]
         public static async Task<IActionResult> RunAsync(
             [HttpTrigger(AuthorizationLevel.Function, "post", Route = null)]
-        HttpRequest req, TraceWriter log)
+        HttpRequest req, ILogger log)
         {
-            log.Info($"C# HTTP trigger function {nameof(PGPDecrypt)} processed a request.");
+            log.LogInformation($"C# HTTP trigger function {nameof(PGPDecrypt)} processed a request.");
 
-            string privateKeySecretId = req.Query["privatekeysecretid"];
+            string privateKeyBase64 = Environment.GetEnvironmentVariable(PrivateKeyEnvironmentVariable);
 
-            if (privateKeySecretId == null)
+            if (string.IsNullOrEmpty(privateKeyBase64))
             {
-                return new BadRequestObjectResult("Please pass a private key secret identifier on the query string");
+                return new BadRequestObjectResult($"Please add a base64 encoded private key to an environment variable called {PrivateKeyEnvironmentVariable}");
             }
 
-            string privateKey;
-            try
-            {
-                privateKey = await GetPrivateKeyAsync(privateKeySecretId);
-            }
-            catch (KeyVaultErrorException e) when (e.Body.Error.Code == "SecretNotFound")
-            {
-                return new NotFoundResult();
-            }
-            catch (KeyVaultErrorException e) when (e.Body.Error.Code == "Forbidden")
-            {
-                return new UnauthorizedResult();
-            }
+            byte[] privateKeyBytes = Convert.FromBase64String(privateKeyBase64);
+            string privateKey = Encoding.UTF8.GetString(privateKeyBytes);
 
             Stream decryptedData = await DecryptAsync(req.Body, privateKey);
 
             return new OkObjectResult(decryptedData);
-        }
-
-        private static async Task<string> GetPrivateKeyAsync(string secretIdentifier)
-        {
-            if (!secrects.ContainsKey(secretIdentifier))
-            {
-                var azureServiceTokenProvider = new AzureServiceTokenProvider();
-                var authenticationCallback = new KeyVaultClient.AuthenticationCallback(azureServiceTokenProvider.KeyVaultTokenCallback);
-                var kvClient = new KeyVaultClient(authenticationCallback, client);
-
-                SecretBundle secretBundle = await kvClient.GetSecretAsync(secretIdentifier);
-                byte[] data = Convert.FromBase64String(secretBundle.Value);
-                secrects[secretIdentifier] = Encoding.UTF8.GetString(data);
-            }
-            return secrects[secretIdentifier];
         }
 
         private static async Task<Stream> DecryptAsync(Stream inputStream, string privateKey)
