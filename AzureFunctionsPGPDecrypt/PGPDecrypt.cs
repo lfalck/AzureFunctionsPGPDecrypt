@@ -5,10 +5,8 @@ using Microsoft.Azure.WebJobs.Extensions.Http;
 using Microsoft.AspNetCore.Http;
 using PgpCore;
 using System.Threading.Tasks;
-using System.Net.Http;
 using System;
 using System.Text;
-using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
 
 namespace AzureFunctionsPGPDecrypt
@@ -16,6 +14,7 @@ namespace AzureFunctionsPGPDecrypt
     public static class PGPDecrypt
     {
         private const string PrivateKeyEnvironmentVariable = "pgp-private-key";
+        private const string PassPhraseEnvironmentVariable = "pgp-passphrase";
 
         [FunctionName(nameof(PGPDecrypt))]
         public static async Task<IActionResult> RunAsync(
@@ -25,6 +24,7 @@ namespace AzureFunctionsPGPDecrypt
             log.LogInformation($"C# HTTP trigger function {nameof(PGPDecrypt)} processed a request.");
 
             string privateKeyBase64 = Environment.GetEnvironmentVariable(PrivateKeyEnvironmentVariable);
+            string passPhrase = Environment.GetEnvironmentVariable(PassPhraseEnvironmentVariable);
 
             if (string.IsNullOrEmpty(privateKeyBase64))
             {
@@ -34,12 +34,12 @@ namespace AzureFunctionsPGPDecrypt
             byte[] privateKeyBytes = Convert.FromBase64String(privateKeyBase64);
             string privateKey = Encoding.UTF8.GetString(privateKeyBytes);
 
-            Stream decryptedData = await DecryptAsync(req.Body, privateKey);
+            Stream decryptedData = await DecryptAsync(req.Body, privateKey, passPhrase);
 
             return new OkObjectResult(decryptedData);
         }
 
-        private static async Task<Stream> DecryptAsync(Stream inputStream, string privateKey)
+        private static async Task<Stream> DecryptAsync(Stream inputStream, string privateKey, string passPhrase)
         {
             using (PGP pgp = new PGP())
             {
@@ -48,7 +48,7 @@ namespace AzureFunctionsPGPDecrypt
                 using (inputStream)
                 using (Stream privateKeyStream = GenerateStreamFromString(privateKey))
                 {
-                    await pgp.DecryptStreamAsync(inputStream, outputStream, privateKeyStream, null);
+                    await pgp.DecryptStreamAsync(inputStream, outputStream, privateKeyStream, passPhrase);
                     outputStream.Seek(0, SeekOrigin.Begin);
                     return outputStream;
                 }
